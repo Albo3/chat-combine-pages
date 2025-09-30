@@ -89,7 +89,7 @@
             font-weight: 500;
         }
 
-        .config-field input {
+        .config-field input[type="text"] {
             width: 100%;
             padding: 10px;
             background: #0e0e10;
@@ -99,9 +99,23 @@
             font-size: 14px;
         }
 
-        .config-field input:focus {
+        .config-field input[type="text"]:focus {
             outline: none;
             border-color: #9147ff;
+        }
+
+        .config-field input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+            cursor: pointer;
+            accent-color: #9147ff;
+        }
+
+        .config-field label:has(input[type="checkbox"]) {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 400;
         }
 
         .config-field small {
@@ -321,6 +335,18 @@
                 <input type="text" id="emote-set" placeholder="01G0X6HFX8000EH87BCAZW2PPP">
                 <small>Custom 7TV emote set to load</small>
             </div>
+            <div class="config-field">
+                <label>
+                    <input type="checkbox" id="show-platform-badges" checked>
+                    Show Platform Badges (TWITCH/KICK/YOUTUBE)
+                </label>
+            </div>
+            <div class="config-field">
+                <label>
+                    <input type="checkbox" id="show-system-messages" checked>
+                    Show System Messages
+                </label>
+            </div>
             <div class="config-buttons">
                 <button class="save-button" id="save-config">Save & Connect</button>
                 <button class="cancel-button" id="cancel-config">Cancel</button>
@@ -348,7 +374,9 @@
             youtube: '',
             youtubeKey: '',
             emoteSet: '',
-            transparent: false
+            transparent: false,
+            showPlatformBadges: true,
+            showSystemMessages: true
         };
 
         // Emote caches
@@ -382,6 +410,8 @@
             config.emoteSet = emoteSetValue;
 
             config.transparent = params.get('transparent') === 'true';
+            config.showPlatformBadges = localStorage.getItem('showPlatformBadges') !== 'false';
+            config.showSystemMessages = localStorage.getItem('showSystemMessages') !== 'false';
         }
 
         // Fetch emotes
@@ -505,12 +535,20 @@
         }
 
         // Add message to unified chat
-        function addMessage(platform, username, message, color = null) {
+        function addMessage(platform, username, message, color = null, isSystemMessage = false) {
+            // Skip system messages if disabled
+            if (isSystemMessage && !config.showSystemMessages) {
+                return;
+            }
+
             const chatMessages = document.getElementById('chat-messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = 'chat-message';
 
-            const platformBadge = `<span class="platform-badge ${platform}">${platform}</span>`;
+            // Conditionally add platform badge
+            const platformBadge = config.showPlatformBadges
+                ? `<span class="platform-badge ${platform}">${platform}</span>`
+                : '';
             const usernameSpan = `<span class="username" style="${color ? `color: ${color}` : ''}">${username}</span>`;
             const messageHTML = replaceEmotes(message);
             const messageSpan = `<span class="message-text">${messageHTML}</span>`;
@@ -584,7 +622,7 @@
                         // Check for successful connection
                         if (msg.includes('376') || msg.includes('JOIN')) {
                             updateStatus('twitch', true);
-                            addMessage('twitch', 'System', `Connected to ${config.twitch}'s chat`, '#9147ff');
+                            addMessage('twitch', 'System', `Connected to ${config.twitch}'s chat`, '#9147ff', true);
                             console.log('Twitch connected successfully');
                         }
                     });
@@ -603,7 +641,7 @@
             } catch (error) {
                 console.error('Error connecting to Twitch:', error);
                 updateStatus('twitch', false);
-                addMessage('twitch', 'System', 'Failed to connect', '#ff0000');
+                addMessage('twitch', 'System', 'Failed to connect', '#ff0000', true);
             }
         }
 
@@ -628,7 +666,7 @@
 
                 kickWs.onopen = () => {
                     updateStatus('kick', true);
-                    addMessage('kick', 'System', `Connected to ${config.kick}'s chat`, '#53fc18');
+                    addMessage('kick', 'System', `Connected to ${config.kick}'s chat`, '#53fc18', true);
 
                     // Subscribe to chatroom
                     const subscribeMsg = JSON.stringify({
@@ -649,10 +687,10 @@
                             console.log('Kick connection established');
                         } else if (data.event === 'pusher:error') {
                             console.error('Kick pusher error:', data.data);
-                            addMessage('kick', 'System', `Error: ${data.data?.message || 'Connection error'}`, '#ff0000');
+                            addMessage('kick', 'System', `Error: ${data.data?.message || 'Connection error'}`, '#ff0000', true);
                         } else if (data.event === 'pusher_internal:subscription_succeeded') {
                             console.log('Kick subscription successful');
-                            addMessage('kick', 'System', 'Listening for messages...', '#53fc18');
+                            addMessage('kick', 'System', 'Listening for messages...', '#53fc18', true);
                         } else if (data.event === 'App\\Events\\ChatMessageEvent') {
                             const messageData = JSON.parse(data.data);
                             const username = messageData.sender?.username || 'Unknown';
@@ -709,7 +747,7 @@
                 }
 
                 updateStatus('youtube', true);
-                addMessage('youtube', 'System', `Connected to YouTube live chat`, '#ff0000');
+                addMessage('youtube', 'System', `Connected to YouTube live chat`, '#ff0000', true);
 
                 // Poll for messages
                 pollYouTubeMessages();
@@ -812,6 +850,8 @@
             document.getElementById('youtube-video').value = config.youtube;
             document.getElementById('youtube-key').value = config.youtubeKey;
             document.getElementById('emote-set').value = config.emoteSet;
+            document.getElementById('show-platform-badges').checked = config.showPlatformBadges;
+            document.getElementById('show-system-messages').checked = config.showSystemMessages;
             configModal.classList.add('active');
         });
 
@@ -825,6 +865,8 @@
             config.youtube = document.getElementById('youtube-video').value.trim();
             config.youtubeKey = document.getElementById('youtube-key').value.trim();
             config.emoteSet = document.getElementById('emote-set').value.trim();
+            config.showPlatformBadges = document.getElementById('show-platform-badges').checked;
+            config.showSystemMessages = document.getElementById('show-system-messages').checked;
 
             // Save to localStorage
             localStorage.setItem('twitch', config.twitch);
@@ -832,6 +874,8 @@
             localStorage.setItem('youtube', config.youtube);
             localStorage.setItem('youtubekey', config.youtubeKey);
             localStorage.setItem('7tv', config.emoteSet);
+            localStorage.setItem('showPlatformBadges', config.showPlatformBadges);
+            localStorage.setItem('showSystemMessages', config.showSystemMessages);
 
             configModal.classList.remove('active');
 
