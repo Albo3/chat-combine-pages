@@ -343,6 +343,12 @@
                     Show System Messages
                 </label>
             </div>
+            <div class="config-field">
+                <label>
+                    <input type="checkbox" id="show-username-colors" checked>
+                    Show Username Colors
+                </label>
+            </div>
             <div class="config-buttons">
                 <button class="save-button" id="save-config">Save & Connect</button>
                 <button class="cancel-button" id="cancel-config">Cancel</button>
@@ -373,7 +379,8 @@
             emoteSet: '',
             transparent: false,
             showPlatformBadges: true,
-            showSystemMessages: true
+            showSystemMessages: true,
+            showUsernameColors: true
         };
 
         // Emote caches
@@ -419,6 +426,12 @@
                 config.showSystemMessages = params.get('hidesystem') !== 'true';
             } else {
                 config.showSystemMessages = localStorage.getItem('showSystemMessages') !== 'false';
+            }
+
+            if (params.has('hidecolors')) {
+                config.showUsernameColors = params.get('hidecolors') !== 'true';
+            } else {
+                config.showUsernameColors = localStorage.getItem('showUsernameColors') !== 'false';
             }
         }
 
@@ -557,7 +570,8 @@
             const platformBadge = config.showPlatformBadges
                 ? `<span class="platform-badge ${platform}">${platform}</span>`
                 : '';
-            const usernameSpan = `<span class="username" style="${color ? `color: ${color}` : ''}">${username}</span>`;
+            const usernameColor = (config.showUsernameColors && color) ? `color: ${color}` : '';
+            const usernameSpan = `<span class="username" style="${usernameColor}">${username}</span>`;
             const messageHTML = replaceEmotes(message);
             const messageSpan = `<span class="message-text">${messageHTML}</span>`;
 
@@ -597,7 +611,8 @@
 
                 twitchWs.onopen = () => {
                     console.log('Twitch WebSocket opened');
-                    // Send anonymous login
+                    // Send anonymous login and request tags for colors
+                    twitchWs.send('CAP REQ :twitch.tv/tags');
                     twitchWs.send('PASS oauth:justinfan12345');
                     twitchWs.send('NICK justinfan12345');
                     twitchWs.send(`JOIN #${config.twitch.toLowerCase()}`);
@@ -622,8 +637,16 @@
                             if (match) {
                                 const username = match[1];
                                 const message = match[2];
-                                console.log('Twitch chat:', username, message);
-                                addMessage('twitch', username, message);
+
+                                // Extract color from tags if available
+                                let color = null;
+                                const colorMatch = msg.match(/color=(#[0-9A-F]{6})/i);
+                                if (colorMatch) {
+                                    color = colorMatch[1];
+                                }
+
+                                console.log('Twitch chat:', username, message, color);
+                                addMessage('twitch', username, message, color);
                             }
                         }
 
@@ -703,8 +726,9 @@
                             const messageData = JSON.parse(data.data);
                             const username = messageData.sender?.username || 'Unknown';
                             const message = messageData.content || '';
-                            console.log('Kick chat message:', username, message);
-                            addMessage('kick', username, message);
+                            const color = messageData.sender?.identity?.color || null;
+                            console.log('Kick chat message:', username, message, color);
+                            addMessage('kick', username, message, color);
                         }
                     } catch (e) {
                         console.error('Kick message parse error:', e, event.data);
@@ -860,6 +884,7 @@
             document.getElementById('emote-set').value = config.emoteSet;
             document.getElementById('show-platform-badges').checked = config.showPlatformBadges;
             document.getElementById('show-system-messages').checked = config.showSystemMessages;
+            document.getElementById('show-username-colors').checked = config.showUsernameColors;
             configModal.classList.add('active');
         });
 
@@ -875,6 +900,7 @@
             config.emoteSet = document.getElementById('emote-set').value.trim();
             config.showPlatformBadges = document.getElementById('show-platform-badges').checked;
             config.showSystemMessages = document.getElementById('show-system-messages').checked;
+            config.showUsernameColors = document.getElementById('show-username-colors').checked;
 
             // Save to localStorage
             localStorage.setItem('twitch', config.twitch);
@@ -884,6 +910,7 @@
             localStorage.setItem('7tv', config.emoteSet);
             localStorage.setItem('showPlatformBadges', config.showPlatformBadges);
             localStorage.setItem('showSystemMessages', config.showSystemMessages);
+            localStorage.setItem('showUsernameColors', config.showUsernameColors);
 
             // Update URL with all parameters
             const params = new URLSearchParams();
@@ -895,6 +922,7 @@
             if (config.transparent) params.set('transparent', 'true');
             if (!config.showPlatformBadges) params.set('hidebadges', 'true');
             if (!config.showSystemMessages) params.set('hidesystem', 'true');
+            if (!config.showUsernameColors) params.set('hidecolors', 'true');
 
             const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
             window.history.replaceState({}, '', newUrl);
