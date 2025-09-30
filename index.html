@@ -24,18 +24,15 @@
         }
 
         #config-button {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: #9147ff;
+            background: transparent;
             border: none;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
+            color: #adadb8;
             cursor: pointer;
-            z-index: 1000;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 16px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         body.transparent #config-button {
@@ -43,7 +40,7 @@
         }
 
         #config-button:hover {
-            background: #7d3ac1;
+            color: #9147ff;
         }
 
         #config-modal {
@@ -261,6 +258,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
         }
 
         body.transparent #status-bar {
@@ -305,8 +303,6 @@
     </style>
 </head>
 <body>
-    <button id="config-button">⚙️ Configure</button>
-
     <div id="config-modal">
         <div id="config-content">
             <h2>Unified Chat Configuration</h2>
@@ -363,6 +359,7 @@
                 <span><span class="status-dot" id="status-youtube"></span>YouTube</span>
             </div>
             <div>Unified Multi-Chat</div>
+            <button id="config-button">⚙️</button>
         </div>
     </div>
 
@@ -410,8 +407,19 @@
             config.emoteSet = emoteSetValue;
 
             config.transparent = params.get('transparent') === 'true';
-            config.showPlatformBadges = localStorage.getItem('showPlatformBadges') !== 'false';
-            config.showSystemMessages = localStorage.getItem('showSystemMessages') !== 'false';
+
+            // URL parameters override localStorage for badge/system message settings
+            if (params.has('hidebadges')) {
+                config.showPlatformBadges = params.get('hidebadges') !== 'true';
+            } else {
+                config.showPlatformBadges = localStorage.getItem('showPlatformBadges') !== 'false';
+            }
+
+            if (params.has('hidesystem')) {
+                config.showSystemMessages = params.get('hidesystem') !== 'true';
+            } else {
+                config.showSystemMessages = localStorage.getItem('showSystemMessages') !== 'false';
+            }
         }
 
         // Fetch emotes
@@ -876,6 +884,20 @@
             localStorage.setItem('7tv', config.emoteSet);
             localStorage.setItem('showPlatformBadges', config.showPlatformBadges);
             localStorage.setItem('showSystemMessages', config.showSystemMessages);
+
+            // Update URL with all parameters
+            const params = new URLSearchParams();
+            if (config.twitch) params.set('twitch', config.twitch);
+            if (config.kick) params.set('kick', config.kick);
+            if (config.youtube) params.set('youtube', config.youtube);
+            if (config.youtubeKey) params.set('youtubekey', config.youtubeKey);
+            if (config.emoteSet) params.set('7tv', config.emoteSet);
+            if (config.transparent) params.set('transparent', 'true');
+            if (!config.showPlatformBadges) params.set('hidebadges', 'true');
+            if (!config.showSystemMessages) params.set('hidesystem', 'true');
+
+            const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            window.history.replaceState({}, '', newUrl);
 
             configModal.classList.remove('active');
 
