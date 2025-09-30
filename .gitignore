@@ -1,2 +1,8 @@
-.claude
-/.claude
+# Ignore everything
+*
+
+# Except the index.html file
+!index.html
+
+# And the .gitignore itself
+!.gitignore
