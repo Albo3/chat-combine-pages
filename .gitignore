@@ -3,5 +3,7 @@
 
 # Except these files
 !index.html
+!app.js
+!style.css
 !.gitignore
 !README.md
