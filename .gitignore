@@ -1,8 +1,7 @@
 # Ignore everything
 *
 
-# Except the index.html file
+# Except these files
 !index.html
-
-# And the .gitignore itself
 !.gitignore
+!README.md
