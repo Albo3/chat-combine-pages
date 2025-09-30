@@ -53,6 +53,12 @@
                     Show Username Colors
                 </label>
             </div>
+            <div class="config-field">
+                <label for="max-messages">Chat History Length:</label>
+                <input type="range" id="max-messages" min="50" max="1000" step="50" value="500">
+                <span id="max-messages-value">500</span> messages
+                <small>How many messages to keep on screen. Lower = smoother performance while gaming</small>
+            </div>
             <div class="config-buttons">
                 <button class="save-button" id="save-config">Save & Connect</button>
                 <button class="cancel-button" id="cancel-config">Cancel</button>

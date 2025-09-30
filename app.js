@@ -8,7 +8,8 @@ const config = {
     transparent: false,
     showPlatformBadges: true,
     showSystemMessages: true,
-    showUsernameColors: true
+    showUsernameColors: true,
+    maxMessages: 500
 };
 
 // Emote caches
@@ -60,6 +61,15 @@ function parseURLParams() {
         config.showUsernameColors = params.get('hidecolors') !== 'true';
     } else {
         config.showUsernameColors = localStorage.getItem('showUsernameColors') !== 'false';
+    }
+
+    // Parse max messages setting
+    const maxMessagesParam = params.get('maxmessages');
+    if (maxMessagesParam) {
+        config.maxMessages = parseInt(maxMessagesParam, 10);
+    } else {
+        const storedMax = localStorage.getItem('maxMessages');
+        config.maxMessages = storedMax ? parseInt(storedMax, 10) : 500;
     }
 }
 
@@ -164,54 +174,89 @@ async function fetchEmotes() {
     }
 }
 
-// Replace emotes in message text
+// Replace emotes in message text (optimized with single pass)
 function replaceEmotes(text) {
-    let html = text;
     const words = text.split(' ');
+    const result = [];
 
-    words.forEach(word => {
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        let found = false;
+
         // Check all emote sources
-        for (const [source, emoteMap] of Object.entries(emotes)) {
+        for (const emoteMap of Object.values(emotes)) {
             if (emoteMap[word]) {
-                const img = `<img class="emote" src="${emoteMap[word]}" alt="${word}" title="${word}">`;
-                html = html.replace(new RegExp(`\\b${word}\\b`, 'g'), img);
+                result.push(`<img class="emote" src="${emoteMap[word]}" alt="${word}" title="${word}">`);
+                found = true;
                 break;
             }
         }
-    });
 
-    return html;
+        if (!found) {
+            result.push(word);
+        }
+    }
+
+    return result.join(' ');
 }
 
-// Add message to unified chat
+// Add message to unified chat (optimized with RAF and fragment)
+let messageQueue = [];
+let rafScheduled = false;
+
 function addMessage(platform, username, message, color = null, isSystemMessage = false) {
     // Skip system messages if disabled
     if (isSystemMessage && !config.showSystemMessages) {
         return;
     }
 
+    messageQueue.push({ platform, username, message, color });
+
+    if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(flushMessageQueue);
+    }
+}
+
+function flushMessageQueue() {
+    rafScheduled = false;
+
+    if (messageQueue.length === 0) return;
+
     const chatMessages = document.getElementById('chat-messages');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'chat-message';
+    const fragment = document.createDocumentFragment();
 
-    // Conditionally add platform badge
-    const platformBadge = config.showPlatformBadges
-        ? `<span class="platform-badge ${platform}">${platform}</span>`
-        : '';
-    const usernameColor = (config.showUsernameColors && color) ? `color: ${color}` : '';
-    const usernameSpan = `<span class="username" style="${usernameColor}">${username}</span>`;
-    const messageHTML = replaceEmotes(message);
-    const messageSpan = `<span class="message-text">${messageHTML}</span>`;
+    // Process all queued messages
+    for (const { platform, username, message, color } of messageQueue) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message';
 
-    messageDiv.innerHTML = platformBadge + usernameSpan + messageSpan;
-    chatMessages.appendChild(messageDiv);
+        // Conditionally add platform badge
+        const platformBadge = config.showPlatformBadges
+            ? `<span class="platform-badge ${platform}">${platform}</span>`
+            : '';
+        const usernameColor = (config.showUsernameColors && color) ? `color: ${color}` : '';
+        const usernameSpan = `<span class="username" style="${usernameColor}">${username}</span>`;
+        const messageHTML = replaceEmotes(message);
+        const messageSpan = `<span class="message-text">${messageHTML}</span>`;
+
+        messageDiv.innerHTML = platformBadge + usernameSpan + messageSpan;
+        fragment.appendChild(messageDiv);
+    }
+
+    chatMessages.appendChild(fragment);
+    messageQueue = [];
 
     // Auto-scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Limit messages to 500
-    while (chatMessages.children.length > 500) {
-        chatMessages.removeChild(chatMessages.firstChild);
+    // Limit messages based on config (batch remove for better performance)
+    const children = chatMessages.children;
+    const toRemove = children.length - config.maxMessages;
+    if (toRemove > 0) {
+        for (let i = 0; i < toRemove; i++) {
+            chatMessages.removeChild(children[0]);
+        }
     }
 }
 
@@ -249,22 +294,25 @@ function connectTwitch() {
         twitchWs.onmessage = (event) => {
             const messages = event.data.split('\r\n');
 
-            messages.forEach(msg => {
-                if (!msg) return;
-                console.log('Twitch IRC:', msg);
+            for (const msg of messages) {
+                if (!msg) continue;
 
                 // Respond to PING
                 if (msg.startsWith('PING')) {
                     twitchWs.send('PONG :tmi.twitch.tv');
-                    return;
+                    continue;
                 }
 
                 // Parse PRIVMSG (chat messages)
                 if (msg.includes('PRIVMSG')) {
-                    const match = msg.match(/:(.+?)!.+?PRIVMSG #\w+ :(.+)/);
-                    if (match) {
-                        const username = match[1];
-                        const message = match[2];
+                    // IRC format with tags: @tags :user!user@user.tmi.twitch.tv PRIVMSG #channel :message
+                    // Extract username from the part after @ tags and before !
+                    const userMatch = msg.match(/\s:(\w+)!/);
+                    const messageMatch = msg.match(/PRIVMSG #\w+ :(.+)$/);
+
+                    if (userMatch && messageMatch) {
+                        const username = userMatch[1];
+                        const message = messageMatch[1];
 
                         // Extract color from tags if available
                         let color = null;
@@ -273,7 +321,6 @@ function connectTwitch() {
                             color = colorMatch[1];
                         }
 
-                        console.log('Twitch chat:', username, message, color);
                         addMessage('twitch', username, message, color);
                     }
                 }
@@ -282,9 +329,9 @@ function connectTwitch() {
                 if (msg.includes('376') || msg.includes('JOIN')) {
                     updateStatus('twitch', true);
                     addMessage('twitch', 'System', `Connected to ${config.twitch}'s chat`, '#9147ff', true);
-                    console.log('Twitch connected successfully');
+                    // console.log('Twitch connected successfully'); // Disabled for performance
                 }
-            });
+            }
         };
 
         twitchWs.onerror = (error) => {
@@ -339,23 +386,23 @@ async function connectKick() {
         kickWs.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                console.log('Kick message:', data);
+                // console.log('Kick message:', data); // Disabled for performance
 
                 // Handle different event types
                 if (data.event === 'pusher:connection_established') {
-                    console.log('Kick connection established');
+                    // console.log('Kick connection established'); // Disabled for performance
                 } else if (data.event === 'pusher:error') {
                     console.error('Kick pusher error:', data.data);
                     addMessage('kick', 'System', `Error: ${data.data?.message || 'Connection error'}`, '#ff0000', true);
                 } else if (data.event === 'pusher_internal:subscription_succeeded') {
-                    console.log('Kick subscription successful');
+                    // console.log('Kick subscription successful'); // Disabled for performance
                     addMessage('kick', 'System', 'Listening for messages...', '#53fc18', true);
                 } else if (data.event === 'App\\Events\\ChatMessageEvent') {
                     const messageData = JSON.parse(data.data);
                     const username = messageData.sender?.username || 'Unknown';
                     const message = messageData.content || '';
                     const color = messageData.sender?.identity?.color || null;
-                    console.log('Kick chat message:', username, message, color);
+                    // console.log('Kick chat message:', username, message, color); // Disabled for performance
                     addMessage('kick', username, message, color);
                 }
             } catch (e) {
@@ -513,7 +560,14 @@ configButton.addEventListener('click', () => {
     document.getElementById('show-platform-badges').checked = config.showPlatformBadges;
     document.getElementById('show-system-messages').checked = config.showSystemMessages;
     document.getElementById('show-username-colors').checked = config.showUsernameColors;
+    document.getElementById('max-messages').value = config.maxMessages;
+    document.getElementById('max-messages-value').textContent = config.maxMessages;
     configModal.classList.add('active');
+});
+
+// Update slider value display
+document.getElementById('max-messages').addEventListener('input', (e) => {
+    document.getElementById('max-messages-value').textContent = e.target.value;
 });
 
 cancelButton.addEventListener('click', () => {
@@ -529,6 +583,7 @@ saveButton.addEventListener('click', () => {
     config.showPlatformBadges = document.getElementById('show-platform-badges').checked;
     config.showSystemMessages = document.getElementById('show-system-messages').checked;
     config.showUsernameColors = document.getElementById('show-username-colors').checked;
+    config.maxMessages = parseInt(document.getElementById('max-messages').value, 10);
 
     // Save to localStorage
     localStorage.setItem('twitch', config.twitch);
@@ -539,6 +594,7 @@ saveButton.addEventListener('click', () => {
     localStorage.setItem('showPlatformBadges', config.showPlatformBadges);
     localStorage.setItem('showSystemMessages', config.showSystemMessages);
     localStorage.setItem('showUsernameColors', config.showUsernameColors);
+    localStorage.setItem('maxMessages', config.maxMessages);
 
     // Update URL with all parameters
     const params = new URLSearchParams();
@@ -551,6 +607,7 @@ saveButton.addEventListener('click', () => {
     if (!config.showPlatformBadges) params.set('hidebadges', 'true');
     if (!config.showSystemMessages) params.set('hidesystem', 'true');
     if (!config.showUsernameColors) params.set('hidecolors', 'true');
+    if (config.maxMessages !== 500) params.set('maxmessages', config.maxMessages);
 
     const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
     window.history.replaceState({}, '', newUrl);

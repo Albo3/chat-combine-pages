@@ -108,6 +108,21 @@ body.transparent #config-button {
     font-weight: 400;
 }
 
+.config-field input[type="range"] {
+    width: 100%;
+    margin: 8px 0;
+    cursor: pointer;
+    accent-color: #9147ff;
+}
+
+.config-field span {
+    display: inline-block;
+    margin-left: 10px;
+    color: #9147ff;
+    font-weight: 600;
+    min-width: 40px;
+}
+
 .config-field small {
     display: block;
     margin-top: 4px;
@@ -162,6 +177,8 @@ body.transparent #config-button {
     overflow-x: hidden;
     padding: 10px;
     scroll-behavior: smooth;
+    will-change: scroll-position;
+    contain: strict;
 }
 
 #chat-messages::-webkit-scrollbar {
@@ -188,12 +205,8 @@ body.transparent #config-button {
     word-wrap: break-word;
     line-height: 1.5;
     font-size: 13px;
-    animation: fadeIn 0.2s ease-in;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-5px); }
-    to { opacity: 1; transform: translateY(0); }
+    will-change: auto;
+    contain: layout style paint;
 }
 
 .chat-message:hover {
@@ -240,6 +253,8 @@ body.transparent #config-button {
     margin: 0 2px;
     max-height: 28px;
     max-width: 112px;
+    will-change: auto;
+    image-rendering: -webkit-optimize-contrast;
 }
 
 #status-bar {
