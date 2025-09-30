@@ -169,6 +169,8 @@ body.transparent #config-button {
     flex-direction: column;
     height: 100vh;
     width: 100%;
+    max-width: var(--max-chat-width, 100%);
+    margin: 0 auto;
 }
 
 #chat-messages {

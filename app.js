@@ -9,7 +9,8 @@ const config = {
     showPlatformBadges: true,
     showSystemMessages: true,
     showUsernameColors: true,
-    maxMessages: 500
+    maxMessages: 500,
+    maxWidth: 1200
 };
 
 // Emote caches
@@ -70,6 +71,15 @@ function parseURLParams() {
     } else {
         const storedMax = localStorage.getItem('maxMessages');
         config.maxMessages = storedMax ? parseInt(storedMax, 10) : 500;
+    }
+
+    // Parse max width setting
+    const maxWidthParam = params.get('maxwidth');
+    if (maxWidthParam) {
+        config.maxWidth = parseInt(maxWidthParam, 10);
+    } else {
+        const storedWidth = localStorage.getItem('maxWidth');
+        config.maxWidth = storedWidth ? parseInt(storedWidth, 10) : 1200;
     }
 }
 
@@ -517,6 +527,9 @@ async function initializeChat() {
         document.body.classList.add('transparent');
     }
 
+    // Apply max width
+    document.documentElement.style.setProperty('--max-chat-width', `${config.maxWidth}px`);
+
     // Fetch emotes first
     await fetchEmotes();
 
@@ -562,12 +575,18 @@ configButton.addEventListener('click', () => {
     document.getElementById('show-username-colors').checked = config.showUsernameColors;
     document.getElementById('max-messages').value = config.maxMessages;
     document.getElementById('max-messages-value').textContent = config.maxMessages;
+    document.getElementById('max-width').value = config.maxWidth;
+    document.getElementById('max-width-value').textContent = config.maxWidth;
     configModal.classList.add('active');
 });
 
-// Update slider value display
+// Update slider value displays
 document.getElementById('max-messages').addEventListener('input', (e) => {
     document.getElementById('max-messages-value').textContent = e.target.value;
+});
+
+document.getElementById('max-width').addEventListener('input', (e) => {
+    document.getElementById('max-width-value').textContent = e.target.value;
 });
 
 cancelButton.addEventListener('click', () => {
@@ -584,6 +603,7 @@ saveButton.addEventListener('click', () => {
     config.showSystemMessages = document.getElementById('show-system-messages').checked;
     config.showUsernameColors = document.getElementById('show-username-colors').checked;
     config.maxMessages = parseInt(document.getElementById('max-messages').value, 10);
+    config.maxWidth = parseInt(document.getElementById('max-width').value, 10);
 
     // Save to localStorage
     localStorage.setItem('twitch', config.twitch);
@@ -595,6 +615,7 @@ saveButton.addEventListener('click', () => {
     localStorage.setItem('showSystemMessages', config.showSystemMessages);
     localStorage.setItem('showUsernameColors', config.showUsernameColors);
     localStorage.setItem('maxMessages', config.maxMessages);
+    localStorage.setItem('maxWidth', config.maxWidth);
 
     // Update URL with all parameters
     const params = new URLSearchParams();
@@ -608,11 +629,15 @@ saveButton.addEventListener('click', () => {
     if (!config.showSystemMessages) params.set('hidesystem', 'true');
     if (!config.showUsernameColors) params.set('hidecolors', 'true');
     if (config.maxMessages !== 500) params.set('maxmessages', config.maxMessages);
+    if (config.maxWidth !== 1200) params.set('maxwidth', config.maxWidth);
 
     const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
     window.history.replaceState({}, '', newUrl);
 
     configModal.classList.remove('active');
+
+    // Apply max width immediately
+    document.documentElement.style.setProperty('--max-chat-width', `${config.maxWidth}px`);
 
     // Reconnect
     disconnectAll();
